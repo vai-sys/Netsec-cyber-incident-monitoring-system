@@ -5,78 +5,121 @@ const createError = require('http-errors');
 
 
 
+// exports.createIncident = async (req, res) => {
+//   try {
+  
+//     const lastIncident = await Incident.findOne().sort({ createdAt: -1 });
+//     const newIncidentId = lastIncident 
+//       ? `INC-${parseInt(lastIncident.Incident_ID.split('-')[1]) + 1}`
+//       : 'INC-1000';
+
+//     const newIncident = new Incident({
+//       ...req.body,
+//       Incident_ID: newIncidentId
+//     });
+
+//     await newIncident.save();
+//     res.status(201).json(newIncident);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error creating incident', error: error.message });
+//   }
+// };
+
 exports.createIncident = async (req, res) => {
   try {
-  
+    // Find the last inserted incident based on createdAt timestamp
     const lastIncident = await Incident.findOne().sort({ createdAt: -1 });
-    const newIncidentId = lastIncident 
-      ? `INC-${parseInt(lastIncident.Incident_ID.split('-')[1]) + 1}`
-      : 'INC-1000';
 
+    let newIncidentId = "INC-1000"; // default starting ID
+
+    if (lastIncident && lastIncident.Incident_ID) {
+      const parts = lastIncident.Incident_ID.split("-");
+      const lastNum = parseInt(parts[1]);
+      newIncidentId = `INC-${lastNum + 1}`;
+    }
+
+    // Create new incident object
     const newIncident = new Incident({
       ...req.body,
       Incident_ID: newIncidentId
     });
 
     await newIncident.save();
-    res.status(201).json(newIncident);
+
+    return res.status(201).json({
+      message: "Incident created successfully",
+      data: newIncident
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Error creating incident', error: error.message });
+    return res.status(500).json({
+      message: "Error creating incident",
+      error: error.message
+    });
   }
 };
 
+
 exports.getAllIncidents = async (req, res) => {
   try {
-    const { 
-      search, 
-      platform, 
-      sector, 
-      threatLevel, 
-      incidentSolved, 
-      startDate, 
+    const {
+      search,
+      receiver_country,
+      receiver_category,
+      incident_type,
+      status,
+      startDate,
       endDate,
       page = 1,
       limit = 10
     } = req.query;
 
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+
     const filter = {};
 
     if (search) {
       filter.$or = [
-        { Description: { $regex: search, $options: 'i' } },
-        { Location: { $regex: search, $options: 'i' } },
-        { Incident_Type: { $regex: search, $options: 'i' } }
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { receiver_name: { $regex: search, $options: 'i' } },
+        { receiver_country: { $regex: search, $options: 'i' } },
+        { incident_type: { $regex: search, $options: 'i' } }
       ];
     }
 
-    if (platform) filter.Platform = platform;
-    if (sector) filter.Sector = sector;
-    if (threatLevel) filter.Threat_Level = threatLevel;
-    if (incidentSolved !== undefined) filter.Incident_Solved = incidentSolved === 'true';
+    if (receiver_country) filter.receiver_country = receiver_country;
+    if (receiver_category) filter.receiver_category = receiver_category;
+    if (incident_type) filter.incident_type = incident_type;
+    if (status) filter.status = status;
 
-    if (startDate && endDate) {
-      filter.Date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+    if (startDate || endDate) {
+      const dateFilter = {};
+      if (startDate) dateFilter.$gte = new Date(startDate);
+      if (endDate) dateFilter.$lte = new Date(endDate);
+      // apply to start_date field if you want incidents that begin within range
+      filter.start_date = dateFilter;
     }
 
     const totalIncidents = await Incident.countDocuments(filter);
     const incidents = await Incident.find(filter)
-      .sort({ Date: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .sort({ start_date: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
 
-    res.json({
+    return res.json({
       incidents,
-      currentPage: page,
-      totalPages: Math.ceil(totalIncidents / limit),
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalIncidents / limitNum),
       totalIncidents
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching incidents', error: error.message });
+    return res.status(500).json({ message: 'Error fetching incidents', error: error.message });
   }
 };
+
 
 exports.getIncidentById = async (req, res) => {
   try {
@@ -323,68 +366,68 @@ exports.getIncidentTimeline = async (req, res, next) => {
 
 
 
-// exports.getIncidentTimeline = async (req, res, next) => {
-//   try {
+exports.getIncidentTimeline = async (req, res, next) => {
+  try {
    
-//     const { 
-//       startDate, 
-//       endDate, 
-//       threatLevel, 
-//       sector, 
-//       incidentType 
-//     } = req.query;
-
-   
-//     const query = {};
-    
-//     if (startDate && endDate) {
-//       query.Date = {
-//         $gte: new Date(startDate),
-//         $lte: new Date(endDate)
-//       };
-//     }
-    
-//     if (threatLevel) {
-//       query.Threat_Level = threatLevel;
-//     }
-    
-//     if (sector) {
-//       query.Sector = sector;
-//     }
-    
-//     if (incidentType) {
-//       query.Incident_Type = incidentType;
-//     }
+    const { 
+      startDate, 
+      endDate, 
+      threatLevel, 
+      sector, 
+      incidentType 
+    } = req.query;
 
    
-//     const timeline = await Incident.find(query)
-//       .select('Incident_ID Date Sector Incident_Type Threat_Level Location Description Incident_Solved Coordinates')
-//       .sort({ Date: -1 })
-//       .lean();
+    const query = {};
+    
+    if (startDate && endDate) {
+      query.Date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+    
+    if (threatLevel) {
+      query.Threat_Level = threatLevel;
+    }
+    
+    if (sector) {
+      query.Sector = sector;
+    }
+    
+    if (incidentType) {
+      query.Incident_Type = incidentType;
+    }
 
    
-//     const timelineMetrics = {
-//       totalIncidents: timeline.length,
-//       threatLevelBreakdown: {},
-//       solvedStatus: {
-//         solved: timeline.filter(incident => incident.Incident_Solved).length,
-//         unsolved: timeline.filter(incident => !incident.Incident_Solved).length
-//       }
-//     };
+    const timeline = await Incident.find(query)
+      .select('Incident_ID Date Sector Incident_Type Threat_Level Location Description Incident_Solved Coordinates')
+      .sort({ Date: -1 })
+      .lean();
 
-//     timeline.forEach(incident => {
-//       if (!timelineMetrics.threatLevelBreakdown[incident.Threat_Level]) {
-//         timelineMetrics.threatLevelBreakdown[incident.Threat_Level] = 0;
-//       }
-//       timelineMetrics.threatLevelBreakdown[incident.Threat_Level]++;
-//     });
+   
+    const timelineMetrics = {
+      totalIncidents: timeline.length,
+      threatLevelBreakdown: {},
+      solvedStatus: {
+        solved: timeline.filter(incident => incident.Incident_Solved).length,
+        unsolved: timeline.filter(incident => !incident.Incident_Solved).length
+      }
+    };
 
-//     res.json({
-//       success: true,
-//       metrics: timelineMetrics,
-//       timeline
-//     });
-//   } catch (error) {
-//     next(createError(500, 'Error retrieving incident timeline'));
-//   }
-// };
+    timeline.forEach(incident => {
+      if (!timelineMetrics.threatLevelBreakdown[incident.Threat_Level]) {
+        timelineMetrics.threatLevelBreakdown[incident.Threat_Level] = 0;
+      }
+      timelineMetrics.threatLevelBreakdown[incident.Threat_Level]++;
+    });
+
+    res.json({
+      success: true,
+      metrics: timelineMetrics,
+      timeline
+    });
+  } catch (error) {
+    next(createError(500, 'Error retrieving incident timeline'));
+  }
+};

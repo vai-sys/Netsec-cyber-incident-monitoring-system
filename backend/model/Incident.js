@@ -1,74 +1,103 @@
+// models/Incident.js
+const mongoose = require('mongoose');
 
-const mongoose = require("mongoose");
+const STATUS_TYPES = ['Open', 'Investigating', 'Resolved', 'Closed', 'Unknown'];
+
+// Fields that should always be an array in the DB
+const ARRAY_FIELDS = [
+  'receiver_country',
+  'receiver_category',
+  'receiver_category_subcode',
+  'sources_url'
+];
+
+// Normalize incoming values into arrays of trimmed strings
+function normalizeToStringArray(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(v => (v == null ? '' : String(v).trim()))
+      .filter(Boolean);
+  }
+  // single value -> array with one trimmed string
+  const s = String(value).trim();
+  return s === '' ? [] : [s];
+}
 
 const IncidentSchema = new mongoose.Schema({
-  Incident_ID: { 
-    type: String, 
-    required: true, 
-    unique: true 
-  },
-  Date: { 
-    type: Date, 
-    required: true 
-  },
-  Platform: { 
-    type: String, 
-    required: true 
-  },
-  Sector: { 
-    type: String, 
-    required: true 
-  },
-  Incident_Type: { 
-    type: String, 
-    required: true 
-  },
-  Threat_Level: { 
-    type: String, 
-    required: true,
-    enum: ['Low', 'Medium', 'High', 'Critical']
-  },
-  Location: { 
-    type: String, 
-    required: true 
-  },
-  Description: { 
-    type: String, 
-    required: true 
-  },
-  Incident_Solved: { 
-    type: Boolean, 
-    default: false 
-  },
-  Source: { 
-    type: String 
-  },
-  Summary: { 
-    type: String, 
-    required: true 
-  },
-  Coordinates: {
-    type: { 
-      type: String, 
-      enum: ['Point'], 
-      default: 'Point' 
-    },
-    coordinates: { 
-      type: [Number], 
-      required: true 
+  // NOTE: no Incident_ID field here — we use MongoDB's _id (ObjectId)
+  name: { type: String, required: true, trim: true },
+  description: { type: String, required: true, trim: true },
+
+  start_date: { type: Date },
+  end_date: { type: Date },
+
+  inclusion_criteria: { type: String, trim: true },
+
+  // single string value (not an array)
+  incident_type: { type: String, trim: true, default: 'Unknown' },
+
+  receiver_name: { type: String, trim: true },
+
+  // these remain arrays and are normalized in pre-validate
+  receiver_country: { type: [String], default: [] },
+  receiver_category: { type: [String], default: [] },
+  receiver_category_subcode: { type: [String], default: [] },
+
+  // list of source URLs
+  sources_attribution: { type: String, trim: true },
+  sources_url: { type: [String], default: [] },
+
+  // status with limited allowed values
+  status: { type: String, enum: STATUS_TYPES, default: 'Open' }
+
+}, {
+  timestamps: { createdAt: 'added_to_DB', updatedAt: 'updated_at' },
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Pre-validate: normalize arrays and ensure incident_type is a single trimmed string
+IncidentSchema.pre('validate', function(next) {
+  // Normalize array fields
+  ARRAY_FIELDS.forEach(field => {
+    if (this.isModified(field) || this[field] == null) {
+      this[field] = normalizeToStringArray(this[field]);
     }
+  });
+
+  // incident_type: if input is array or missing, pick first value or Unknown
+  const it = this.incident_type;
+  if (Array.isArray(it)) {
+    const first = it.map(x => (x == null ? '' : String(x).trim())).find(Boolean);
+    this.incident_type = first || 'Unknown';
+  } else {
+    this.incident_type = (it == null) ? 'Unknown' : String(it).trim() || 'Unknown';
   }
-}, { 
-  timestamps: true 
+
+  // status fallback
+  if (!this.status || !STATUS_TYPES.includes(this.status)) {
+    this.status = 'Open';
+  }
+
+  // simple date sanity: clear invalid dates (optional)
+  if (this.start_date && isNaN(new Date(this.start_date).getTime())) this.start_date = undefined;
+  if (this.end_date && isNaN(new Date(this.end_date).getTime())) this.end_date = undefined;
+
+  next();
 });
 
+// // Friendly JSON output: expose id and remove _id and __v
+// IncidentSchema.set('toJSON', {
+//   virtuals: true,
+//   transform: (doc, ret) => {
+//     ret.id = ret._id;              // keep ObjectId if you want, or ret._id.toString()
+//     delete ret._id;
+//     delete ret.__v;
+//     return ret;
+//   }
+// });
 
-IncidentSchema.index({ Coordinates: '2dsphere' });
 
-IncidentSchema.index({ 
-  Description: 'text', 
-  Location: 'text', 
-  Incident_Type: 'text' 
-});
 
 module.exports = mongoose.model('Incident', IncidentSchema);
