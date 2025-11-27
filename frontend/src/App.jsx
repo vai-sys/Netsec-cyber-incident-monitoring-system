@@ -16,6 +16,7 @@ import './index.css';
 
 
 import Dashboard from './Components/Dashboard'
+import ResolutionMetrics from './Components/ResolutionMetrics';
 
 
 const PrivateRoute = ({ children }) => {
@@ -84,6 +85,15 @@ function App() {
           element={
             <PrivateRoute>
               <SectorAnalysis />
+            </PrivateRoute>
+          }
+        />
+
+          <Route
+          path="/resolution"
+          element={
+            <PrivateRoute>
+              <ResolutionMetrics />
             </PrivateRoute>
           }
         />
