@@ -8,8 +8,7 @@ import AuthPage from './Components/AuthPage';
 import Profile from './Components/Profile';
 import Incidents from './Components/Incidents';
 
-// import MapView from './Components/MapView';
-import Timeline from './Components/Timeline';
+
 import SectorAnalysis from './Components/Sector';
 import IncidentDetails from './Components/IncidentDetail';
 import './index.css';
@@ -17,6 +16,12 @@ import './index.css';
 
 import Dashboard from './Components/Dashboard'
 import ResolutionMetrics from './Components/ResolutionMetrics';
+import VelocityMetrics from './Components/Velocity';
+import StatusBreakdown from './Components/Status';
+import CategoryDistribution from './Components/CategoryDistribution';
+import TypeTrends from './Components/Trends';
+import MoMGrowth from './Components/MOM';
+import GeographicHeatmap from './Components/Map';
 
 
 const PrivateRoute = ({ children }) => {
@@ -72,14 +77,7 @@ function App() {
           }
         />
      
-        <Route
-          path="/timeline"
-          element={
-            <PrivateRoute>
-              <Timeline />
-            </PrivateRoute>
-          }
-        />
+       
         <Route
           path="/sector"
           element={
@@ -94,6 +92,55 @@ function App() {
           element={
             <PrivateRoute>
               <ResolutionMetrics />
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/velocity"
+          element={
+            <PrivateRoute>
+              <VelocityMetrics />
+            </PrivateRoute>
+          }
+        />
+
+         <Route
+          path="/status"
+          element={
+            <PrivateRoute>
+              <StatusBreakdown/>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/trends"
+          element={
+            <PrivateRoute>
+              <TypeTrends/>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/mom"
+          element={
+            <PrivateRoute>
+              <MoMGrowth/>
+            </PrivateRoute>
+          }
+        />
+         <Route
+          path="/map"
+          element={
+            <PrivateRoute>
+              <GeographicHeatmap/>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/category"
+          element={
+            <PrivateRoute>
+              <CategoryDistribution/>
             </PrivateRoute>
           }
         />
