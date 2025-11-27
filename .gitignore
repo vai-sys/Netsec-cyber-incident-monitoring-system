@@ -1,0 +1,58 @@
+# =========================
+# Backend (Node + Express)
+# =========================
+backend/node_modules/
+backend/package-lock.json
+backend/npm-debug.log
+backend/yarn-debug.log
+backend/yarn-error.log
+backend/.env
+backend/.env.local
+backend/.env.development.local
+backend/.env.test.local
+backend/.env.production.local
+
+# Backend build/output
+backend/dist/
+backend/build/
+backend/logs/
+backend/*.log
+
+# =========================
+# Frontend (React)
+# =========================
+frontend/node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+frontend/.env.test
+
+# =========================
+# Common cache/log/output
+# =========================
+*.log
+logs/
+*.cache
+.cache/
+coverage/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Editor/IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Misc / Backup Files
+# =========================
+*.swp
+*.swo
+*.bak
