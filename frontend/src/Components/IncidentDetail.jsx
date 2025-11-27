@@ -1,128 +1,50 @@
-// import React, { useState, useEffect } from "react";
-// import { useParams } from "react-router-dom";
-// import { motion } from "framer-motion";
-
-// const IncidentDetails = () => {
-//   const { id } = useParams();
-//   const [incident, setIncident] = useState(null);
-//   const [loading, setLoading] = useState(true);
-
-//   useEffect(() => {
-//     const fetchIncidentDetails = async () => {
-//       try {
-//         const token = localStorage.getItem("token");
-//         const response = await fetch(
-//           `http://localhost:5000/api/incidents/${id}`,
-//           {
-//             headers: {
-//               Authorization: `Bearer ${token}`,
-//               "Content-Type": "application/json",
-//             },
-//           }
-//         );
-
-//         if (!response.ok) {
-//           throw new Error("Failed to fetch incident details");
-//         }
-
-//         const data = await response.json();
-//         setIncident(data);
-//         setLoading(false);
-//       } catch (error) {
-//         console.error("Error fetching incident details:", error);
-//         setLoading(false);
-//       }
-//     };
-
-//     fetchIncidentDetails();
-//   }, [id]);
-
-//   if (loading) {
-//     return (
-//       <motion.div
-//         className="flex justify-center items-center h-screen bg-gray-900 text-white"
-//         initial={{ opacity: 0 }}
-//         animate={{ opacity: 1 }}
-//       >
-//         Loading Incident Details...
-//       </motion.div>
-//     );
-//   }
-
-//   if (!incident) {
-//     return <div>Incident not found</div>;
-//   }
-
-//   return (
-//     <div className="min-h-screen bg-gray-900 text-white p-6">
-//       <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg p-8 shadow-lg">
-//         <motion.div
-//           initial={{ opacity: 0, y: 50 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           transition={{ duration: 0.5 }}
-//         >
-//           <div className="flex justify-between items-center mb-6">
-//             <h1 className="text-3xl font-bold text-green-500">
-//               Incident: {incident.Incident_ID}
-//             </h1>
-//             <span
-//               className={`px-4 py-2 rounded-full text-sm font-bold ${
-//                 incident.Incident_Solved
-//                   ? "bg-green-100 text-green-800"
-//                   : "bg-red-100 text-red-800"
-//               }`}
-//             >
-//               {incident.Incident_Solved ? "Solved" : "Unsolved"}
-//             </span>
-//           </div>
-
-//           <p className="text-gray-300">{incident.Description}</p>
-//           <p className="text-gray-300">Date: {new Date(incident.Date).toLocaleString()}</p>
-//           <p className="text-gray-300">Sector: {incident.Sector}</p>
-//         </motion.div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default IncidentDetails;
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import axios from "axios";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { MapPin, Calendar, ArrowLeft, ExternalLink, Shield, AlertCircle } from "lucide-react";
+
+const getStatusConfig = (status) => {
+  return {
+    Open: { bg: "bg-yellow-100 text-yellow-800", badge: "Open", Icon: AlertCircle },
+    Investigating: { bg: "bg-orange-100 text-orange-800", badge: "Investigating", Icon: AlertCircle },
+    Resolved: { bg: "bg-green-100 text-green-800", badge: "Resolved", Icon: Shield },
+    Closed: { bg: "bg-gray-100 text-gray-800", badge: "Closed", Icon: AlertCircle },
+    Unknown: { bg: "bg-gray-100 text-gray-800", badge: "Unknown", Icon: AlertCircle },
+  }[status] || { bg: "bg-gray-100 text-gray-800", badge: status || "Unknown", Icon: AlertCircle };
+};
 
 const IncidentDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchIncidentDetails = async () => {
+    const fetchIncident = async () => {
+      setLoading(true);
+      setError("");
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch(
-          `http://localhost:5000/api/incidents/${id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const res = await axios.get(`http://localhost:5000/api/incidents/${id}`, { headers });
+        setIncident(res.data || null);
+      } catch (err) {
+        console.error("Error fetching incident:", err);
+        setError(
+          err.response?.data?.message ||
+            err.message ||
+            "Failed to fetch incident details"
         );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch incident details");
-        }
-
-        const data = await response.json();
-        setIncident(data);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching incident details:", error);
+        setIncident(null);
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchIncidentDetails();
+    if (id) fetchIncident();
   }, [id]);
 
   if (loading) {
@@ -132,89 +54,191 @@ const IncidentDetails = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
-        Loading Incident Details...
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-4 text-green-300">Loading incident...</p>
+        </div>
       </motion.div>
     );
   }
 
-  if (!incident) {
-    return <div className="text-white">Incident not found</div>;
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-3xl mx-auto bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <ArrowLeft className="cursor-pointer" onClick={() => navigate(-1)} />
+            <h2 className="text-xl font-semibold">Error</h2>
+          </div>
+          <p className="text-red-400">{error}</p>
+        </div>
+      </div>
+    );
   }
 
-  const getThreatLevelColor = (level) => {
-    const colors = {
-      Low: "bg-green-100 text-green-800",
-      Medium: "bg-yellow-100 text-yellow-800",
-      High: "bg-orange-100 text-orange-800",
-      Critical: "bg-red-100 text-red-800",
-    };
-    return colors[level] || "bg-gray-100 text-gray-800";
-  };
+  if (!incident) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-3xl mx-auto bg-gray-800 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <ArrowLeft className="cursor-pointer" onClick={() => navigate(-1)} />
+            <h2 className="text-xl font-semibold">Incident not found</h2>
+          </div>
+          <p className="text-gray-400">No incident with that ID was found.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Map schema fields to display variables (fallbacks)
+  const {
+    _id,
+    name,
+    description,
+    inclusion_criteria,
+    incident_type,
+    start_date,
+    end_date,
+    receiver_country,
+    receiver_category,
+    sources_url,
+    status,
+    added_to_DB,
+    updated_at,
+  } = incident;
+
+  const statusCfg = getStatusConfig(status);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg p-8 shadow-lg">
+      <div className="max-w-4xl mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: 50 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          className="bg-gray-800 rounded-lg p-6 shadow-lg"
         >
-          {/* Incident Header */}
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-green-500">
-              Incident: {incident.Incident_ID}
-            </h1>
-            <span
-              className={`px-4 py-2 rounded-full text-sm font-bold ${getThreatLevelColor(
-                incident.Threat_Level
-              )}`}
-            >
-              {incident.Threat_Level}
-            </span>
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="text-gray-300 hover:text-white p-2 rounded-md"
+                  aria-label="Back"
+                >
+                  <ArrowLeft />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-white">{name || `Incident ${_id}`}</h1>
+                  <div className="text-sm text-gray-400 mt-1">
+                    {incident_type ? `${incident_type}` : "Type: Unknown"} ·{" "}
+                    {start_date ? new Date(start_date).toLocaleString() : added_to_DB ? new Date(added_to_DB).toLocaleString() : "Date unknown"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${statusCfg.bg}`}>
+                <statusCfg.Icon size={16} className={statusCfg.bg ? "" : ""} />
+                <span className="text-sm font-semibold">{statusCfg.badge}</span>
+              </div>
+              <div className="text-xs text-gray-400 mt-2">
+                Updated: {updated_at ? new Date(updated_at).toLocaleString() : "—"}
+              </div>
+            </div>
           </div>
 
-          {/* Incident Summary */}
+          {/* Summary / Description */}
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-green-400 mb-2">Summary:</h2>
-            <p className="text-gray-300">{incident.Summary}</p>
+            <h2 className="text-lg font-semibold text-green-400 mb-2">Description</h2>
+            <p className="text-gray-300 leading-relaxed">
+              {description || inclusion_criteria || "No description or inclusion criteria provided."}
+            </p>
           </div>
 
-          {/* Incident Description */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-green-400 mb-2">Description:</h2>
-            <p className="text-gray-300">{incident.Description}</p>
-          </div>
-
-          {/* Additional Information */}
+          {/* Key details grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <h2 className="text-lg font-semibold text-green-400">Incident Type:</h2>
-              <p className="text-gray-300">{incident.Incident_Type}</p>
+              <h3 className="text-sm text-gray-400">Incident Type</h3>
+              <p className="text-white font-medium">{incident_type || "Unknown"}</p>
             </div>
+
             <div>
-              <h2 className="text-lg font-semibold text-green-400">Sector:</h2>
-              <p className="text-gray-300">{incident.Sector}</p>
+              <h3 className="text-sm text-gray-400">Date Range</h3>
+              <p className="text-white font-medium">
+                {start_date ? new Date(start_date).toLocaleString() : "—"}
+                {start_date || end_date ? " → " : ""}
+                {end_date ? new Date(end_date).toLocaleString() : "—"}
+              </p>
             </div>
+
             <div>
-              <h2 className="text-lg font-semibold text-green-400">Date:</h2>
-              <p className="text-gray-300">{new Date(incident.Date).toLocaleString()}</p>
+              <h3 className="text-sm text-gray-400">Receiver Country</h3>
+              <p className="text-white font-medium">
+                {Array.isArray(receiver_country) && receiver_country.length > 0
+                  ? receiver_country.join(", ")
+                  : (receiver_country || "—")}
+              </p>
             </div>
+
             <div>
-              <h2 className="text-lg font-semibold text-green-400">Location:</h2>
-              <p className="text-gray-300">{incident.Location}</p>
+              <h3 className="text-sm text-gray-400">Receiver Category</h3>
+              <p className="text-white font-medium">
+                {Array.isArray(receiver_category) && receiver_category.length > 0
+                  ? receiver_category.join(", ")
+                  : (receiver_category || "—")}
+              </p>
             </div>
           </div>
 
-          {/* Incident Status */}
-          <div className="flex justify-start items-center">
-            <span
-              className={`px-4 py-2 rounded-full text-sm font-bold ${incident.Incident_Solved
-                ? "bg-green-100 text-green-800"
-                : "bg-red-100 text-red-800"
-              }`}
-            >
-              {incident.Incident_Solved ? "Solved" : "Unsolved"}
-            </span>
+          {/* Sources */}
+          <div className="mb-6">
+            <h3 className="text-sm text-gray-400 mb-2">Sources</h3>
+            {Array.isArray(sources_url) && sources_url.length > 0 ? (
+              <ul className="space-y-2">
+                {sources_url.map((src, idx) => (
+                  <li key={idx} className="text-sm">
+                    <a
+                      href={src}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-green-300 hover:underline inline-flex items-center gap-2"
+                    >
+                      <ExternalLink size={14} />
+                      <span className="truncate max-w-md block">{src}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400">No sources available.</p>
+            )}
+          </div>
+
+          {/* Inclusion criteria */}
+          {inclusion_criteria && (
+            <div className="mb-4">
+              <h3 className="text-sm text-gray-400 mb-2">Inclusion Criteria</h3>
+              <p className="text-gray-300">{inclusion_criteria}</p>
+            </div>
+          )}
+
+          {/* Footer actions */}
+          <div className="mt-6 flex items-center justify-between">
+            <div className="text-sm text-gray-400">
+              Incident ID: <span className="text-white font-mono">{_id}</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+             
+
+              <button
+                onClick={() => navigate(-1)}
+                className="px-4 py-2 bg-green-600 rounded-md text-sm text-white hover:bg-green-500 transition"
+              >
+                Back
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>
