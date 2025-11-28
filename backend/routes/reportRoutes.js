@@ -21,10 +21,3 @@ router.get('/:id', auth, rbac(['admin', 'user']), getReportById);
 router.patch('/:id/status', auth, rbac(['admin']), updateReportStatus);
 
 module.exports = router;
-
-
-
-
-
-
-
