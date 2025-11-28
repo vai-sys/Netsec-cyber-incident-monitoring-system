@@ -13,6 +13,8 @@ import IncidentDetails from './Components/IncidentDetail';
 import SectorAnalysis from './Components/Sector';
 import Reports from './Components/Reports';
 import ReportCreationDark from './Components/Createreport';
+import ReportDetail from './Components/ReportDetail';
+
 
 // dashboard + modular KPI components
 import Dashboard from './Components/Dashboard';
@@ -55,6 +57,15 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+  path="/reports/:id"
+  element={
+    <PrivateRoute>
+      <ReportDetail />
+    </PrivateRoute>
+  }
+/>
+
 
         <Route
           path="/profile"

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  Search, 
-  FileText, 
+import {
+  Search,
+  FileText,
   FileSpreadsheet,
-  FilePlus, 
-  BarChart2 
+  FilePlus,
+  BarChart2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
@@ -23,12 +23,11 @@ const ReportsList = () => {
   const [filters, setFilters] = useState({
     search: '',
     incidentType: '',
-    threatLevel: '',
+    threatLevel: ''
   });
   const [loading, setLoading] = useState(false);
   const [incidentCount, setIncidentCount] = useState(0);
 
-  
   const fetchReports = async (page = 1) => {
     setLoading(true);
     try {
@@ -40,49 +39,70 @@ const ReportsList = () => {
           limit: 9,
           search: filters.search,
           incidentType: filters.incidentType,
-          threatLevel: filters.threatLevel,
+          threatLevel: filters.threatLevel
         }
       });
 
-      setReports(response.data.reports);
-      setFilteredReports(response.data.reports);
+      // expected: { reports: [...], currentPage, totalPages, totalReports }
+      const data = response.data;
+      setReports(data.reports || []);
+      setFilteredReports(data.reports || []);
       setPagination({
-        currentPage: response.data.currentPage,
-        totalPages: response.data.totalPages,
-        totalReports: response.data.totalReports
+        currentPage: data.currentPage || page,
+        totalPages: data.totalPages || 1,
+        totalReports: data.totalReports || (data.reports ? data.reports.length : 0)
       });
     } catch (error) {
       toast.error('Failed to fetch reports');
-      console.error('Error fetching reports:', error);
+      console.error('Error fetching reports:', error?.response?.data || error.message || error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  
   const fetchIncidentCount = async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get('http://localhost:5000/api/incidents', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setIncidentCount(response.data.totalIncidents);
+      setIncidentCount(response.data.totalIncidents || 0);
     } catch (error) {
       toast.error('Failed to fetch incident count');
-      console.error('Error fetching incidents:', error);
+      console.error('Error fetching incidents:', error?.response?.data || error.message || error);
     }
   };
 
-  
   useEffect(() => {
-    fetchReports();
+    fetchReports(pagination.currentPage);
     fetchIncidentCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    filters.search, 
-    filters.incidentType, 
+    filters.search,
+    filters.incidentType,
     filters.threatLevel
   ]);
 
-  
+  // optional: local client-side search/filter (keeps UI snappy)
+  useEffect(() => {
+    if (!filters.search && !filters.incidentType && !filters.threatLevel) {
+      setFilteredReports(reports);
+      return;
+    }
+    const q = filters.search.trim().toLowerCase();
+    const result = reports.filter(r => {
+      const matchesSearch =
+        !q ||
+        (r.Title && r.Title.toLowerCase().includes(q)) ||
+        (r.Description && r.Description.toLowerCase().includes(q)) ||
+        (r.Incident_Type && r.Incident_Type.toLowerCase().includes(q));
+      const matchesType = !filters.incidentType || (r.Incident_Type === filters.incidentType);
+      const matchesThreat = !filters.threatLevel || (r.Threat_Level === filters.threatLevel);
+      return matchesSearch && matchesType && matchesThreat;
+    });
+    setFilteredReports(result);
+  }, [filters, reports]);
+
   const downloadReports = async (format) => {
     try {
       const token = localStorage.getItem('token');
@@ -92,19 +112,26 @@ const ReportsList = () => {
         responseType: 'blob'
       });
 
-      const blob = new Blob([response.data], { 
-        type: format === 'pdf' ? 'application/pdf' : 'text/csv' 
+      const blob = new Blob([response.data], {
+        type: format === 'pdf' ? 'application/pdf' : 'text/csv'
       });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
       link.download = `reports.${format}`;
       link.click();
-      
+
       toast.success(`Reports downloaded in ${format.toUpperCase()} format`);
     } catch (error) {
       toast.error('Failed to download reports');
-      console.error('Download error:', error);
+      console.error('Download error:', error?.response?.data || error.message || error);
     }
+  };
+
+  // Pagination helpers (calls server for page)
+  const goToPage = (p) => {
+    const page = Math.max(1, Math.min(p, pagination.totalPages));
+    setPagination(prev => ({ ...prev, currentPage: page }));
+    fetchReports(page);
   };
 
   return (
@@ -122,18 +149,18 @@ const ReportsList = () => {
             </p>
           </div>
           <div className="flex space-x-4">
-            <button 
+            <button
               className="bg-green-700 text-white px-4 py-2 rounded-md flex items-center hover:bg-green-600 transition"
-              onClick={() => navigate('/create-report')}
+              onClick={() => navigate('/reports/create')}
             >
               <FilePlus className="mr-2" /> New Report
             </button>
-            <button 
+            <button
               className="bg-gray-800 text-green-400 px-4 py-2 rounded-md flex items-center hover:bg-gray-700 transition"
               onClick={() => navigate('/incidents')}
             >
-              <BarChart2 className="mr-2" /> 
-              Incidents 
+              <BarChart2 className="mr-2" />
+              Incidents
               <span className="ml-2 bg-green-500 text-white rounded-full px-2 py-1 text-xs">
                 {incidentCount}
               </span>
@@ -145,38 +172,38 @@ const ReportsList = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Search Input */}
           <div className="relative">
-            <input 
+            <input
               type="text"
               placeholder="Search reports..."
               className="w-full p-3 bg-gray-900 text-green-300 border border-green-700 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
             <Search className="absolute right-3 top-4 text-green-500" />
           </div>
 
           {/* Incident Type Filter */}
-          <select 
+          <select
             className="p-3 bg-gray-900 text-green-300 border border-green-700 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             value={filters.incidentType}
-            onChange={(e) => setFilters({...filters, incidentType: e.target.value})}
+            onChange={(e) => setFilters({ ...filters, incidentType: e.target.value })}
           >
-            <option value="" className="bg-black">All Incident Types</option>
-            <option value="Security Breach" className="bg-black">Security Breach</option>
-            <option value="Equipment Damage" className="bg-black">Equipment Damage</option>
-            <option value="Network Intrusion" className="bg-black">Network Intrusion</option>
+            <option value="">All Incident Types</option>
+            <option value="Security Breach">Security Breach</option>
+            <option value="Equipment Damage">Equipment Damage</option>
+            <option value="Network Intrusion">Network Intrusion</option>
           </select>
 
           {/* Threat Level Filter */}
-          <select 
+          <select
             className="p-3 bg-gray-900 text-green-300 border border-green-700 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             value={filters.threatLevel}
-            onChange={(e) => setFilters({...filters, threatLevel: e.target.value})}
+            onChange={(e) => setFilters({ ...filters, threatLevel: e.target.value })}
           >
-            <option value="" className="bg-black">All Threat Levels</option>
-            <option value="High" className="bg-black">High</option>
-            <option value="Medium" className="bg-black">Medium</option>
-            <option value="Low" className="bg-black">Low</option>
+            <option value="">All Threat Levels</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
           </select>
         </div>
 
@@ -207,7 +234,7 @@ const ReportsList = () => {
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredReports.map((report) => (
-              <div 
+              <div
                 key={report._id}
                 className={`
                   bg-gray-900 border border-green-700 rounded-lg p-6 
@@ -222,7 +249,7 @@ const ReportsList = () => {
                   </span>
                   <span className={`
                     px-3 py-1 rounded-full text-sm
-                    ${report.Threat_Level === 'High' ? 'bg-red-600' : 
+                    ${report.Threat_Level === 'High' ? 'bg-red-600' :
                       report.Threat_Level === 'Medium' ? 'bg-yellow-600' : 'bg-green-600'}
                     text-white
                   `}>
@@ -236,13 +263,36 @@ const ReportsList = () => {
                   {report.Description}
                 </p>
                 <div className="flex justify-between items-center">
-                  <span className="text-green-600">{report.Location}</span>
+                  <span className="text-green-600">{report.Location || 'N/A'}</span>
                   <span className="text-green-600">
-                    {new Date(report.Date).toLocaleDateString()}
+                    {report.Date ? new Date(report.Date).toLocaleDateString() : ''}
                   </span>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Simple Pagination Controls */}
+        {!loading && pagination.totalPages > 1 && (
+          <div className="flex justify-center items-center mt-8 space-x-3">
+            <button
+              onClick={() => goToPage(pagination.currentPage - 1)}
+              disabled={pagination.currentPage <= 1}
+              className="px-3 py-1 bg-gray-800 text-green-300 rounded disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <div className="text-green-300">
+              Page {pagination.currentPage} of {pagination.totalPages}
+            </div>
+            <button
+              onClick={() => goToPage(pagination.currentPage + 1)}
+              disabled={pagination.currentPage >= pagination.totalPages}
+              className="px-3 py-1 bg-gray-800 text-green-300 rounded disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
         )}
       </div>
@@ -251,4 +301,3 @@ const ReportsList = () => {
 };
 
 export default ReportsList;
-
