@@ -9,7 +9,9 @@ const {
     getSectorThreatAnalysis,
     getIncidentTimeline
 } = require('../controllers/incidentController');
-const {resolutionMetrics , velocity ,statusBreakdown ,categoryDistribution,typetrends,durationAnalysis,geographicHeatmap ,momGrowth,recentActivity,topTargets} =require('../controllers/dashboardController');
+
+ 
+const {resolutionMetrics , velocity ,statusBreakdown ,categoryDistribution,typetrends,durationAnalysis,geographicHeatmap ,momGrowth,recentActivity,topTargets ,getLeftCards ,getIncidentsBySector , getIncidentTypePerSector ,getSectorDistribution , getTop5Sectors ,getTrendBySector , getSectorKPITable} =require('../controllers/dashboardController');
 const auth = require('../middleware/auth');
 const rbac = require('../middleware/rbacMiddleware');
 
@@ -32,6 +34,22 @@ router.get('/kpi/growth', momGrowth);
 router.get('/kpi/recent', recentActivity);
 
 
+//left
+router.get('/cards', getLeftCards);
+
+// Center section
+router.get('/incidents-by-sector', getIncidentsBySector);
+router.get('/incident-type-per-sector', getIncidentTypePerSector);
+
+// Right side
+router.get('/sector-distribution', getSectorDistribution);
+router.get('/top5-sectors', getTop5Sectors);
+
+// Bottom section
+router.get('/trend-by-sector', getTrendBySector);
+router.get('/sector-kpi-table', getSectorKPITable);
+
+
 router.post('/', auth, rbac(['admin', 'user']), createIncident);
 router.get('/', auth, rbac(['admin', 'user']), getAllIncidents);
 
@@ -39,5 +57,10 @@ router.get('/', auth, rbac(['admin', 'user']), getAllIncidents);
 router.get('/:id', auth, rbac(['admin', 'user']), getIncidentById);
 router.put('/:id', auth, rbac(['admin']), updateIncident);
 router.delete('/:id', auth, rbac(['admin']), deleteIncident);
+
+
+
+
+
 
 module.exports = router;

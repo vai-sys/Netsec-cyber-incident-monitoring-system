@@ -360,3 +360,286 @@ exports.recentActivity = async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 };
+
+
+
+
+
+
+/**
+ * Helper: unwind receiver_category and filter empty values
+ * Many pipelines reuse this pattern, so we create a small helper to keep code readable.
+ */
+function baseUnwindSectorPipeline() {
+  return [
+    // ensure receiver_category exists and is an array (schema pre-validation should ensure this)
+    { $match: { receiver_category: { $exists: true, $ne: [] } } },
+    { $unwind: '$receiver_category' },
+    // trim whitespace (in case values contain extra spaces)
+    {
+      $addFields: {
+        sector: { $trim: { input: '$receiver_category' } }
+      }
+    },
+    { $match: { sector: { $ne: '' } } }
+  ];
+}
+
+/**
+ * Left cards: total incidents, number of sectors impacted, highest impacted sector, top attack type
+ */
+exports.getLeftCards = async (req, res) => {
+  try {
+    // total incidents
+    const totalIncidents = await Incident.countDocuments();
+
+    // unique sectors impacted and counts per sector
+    const sectorCounts = await Incident.aggregate([
+      ...baseUnwindSectorPipeline(),
+      { $group: { _id: '$sector', count: { $sum: 1 } } },
+      { $sort: { count: -1 } } // highest first
+    ]);
+
+    const numberOfSectorsImpacted = sectorCounts.length;
+    const highestImpactedSector = sectorCounts.length ? {
+      sector: sectorCounts[0]._id,
+      count: sectorCounts[0].count
+    } : { sector: null, count: 0 };
+
+    // top attack type across all incidents
+    const topAttack = await Incident.aggregate([
+      { $match: { incident_type: { $exists: true, $ne: '' } } },
+      { $group: { _id: { incident_type: '$incident_type' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 }
+    ]);
+
+    const topAttackType = topAttack.length ? { incident_type: topAttack[0]._id.incident_type, count: topAttack[0].count } : { incident_type: null, count: 0 };
+
+    return res.json({
+      totalIncidents,
+      numberOfSectorsImpacted,
+      highestImpactedSector,
+      topAttackType
+    });
+  } catch (err) {
+    console.error('getLeftCards error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Center: Bar chart — incidents by sector
+ * Returns: [{ sector, count }]
+ */
+exports.getIncidentsBySector = async (req, res) => {
+  try {
+    const rows = await Incident.aggregate([
+      ...baseUnwindSectorPipeline(),
+      { $group: { _id: '$sector', count: { $sum: 1 } } },
+      { $project: { _id: 0, sector: '$_id', count: 1 } },
+      { $sort: { count: -1 } }
+    ]);
+
+    return res.json(rows);
+  } catch (err) {
+    console.error('getIncidentsBySector error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Center: Stacked bar — incident type per sector
+ * Returns: [{ sector, breakdown: [{ incident_type, count }, ...], total }]
+ */
+exports.getIncidentTypePerSector = async (req, res) => {
+  try {
+    const rows = await Incident.aggregate([
+      ...baseUnwindSectorPipeline(),
+      // group by sector + incident_type
+      { $group: { _id: { sector: '$sector', etype: '$incident_type' }, count: { $sum: 1 } } },
+      // reshape
+      {
+        $group: {
+          _id: '$_id.sector',
+          total: { $sum: '$count' },
+          breakdown: {
+            $push: { incident_type: '$_id.etype', count: '$count' }
+          }
+        }
+      },
+      { $project: { _id: 0, sector: '$_id', total: 1, breakdown: 1 } },
+      { $sort: { total: -1 } }
+    ]);
+
+    return res.json(rows);
+  } catch (err) {
+    console.error('getIncidentTypePerSector error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Right: Pie chart — sector distribution (same as incidents by sector but included for clarity)
+ */
+exports.getSectorDistribution = async (req, res) => {
+  try {
+    const rows = await exports.getIncidentsBySectorInternal();
+    return res.json(rows);
+  } catch (err) {
+    console.error('getSectorDistribution error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// internal helper for reuse
+exports.getIncidentsBySectorInternal = async () => {
+  const rows = await Incident.aggregate([
+    ...baseUnwindSectorPipeline(),
+    { $group: { _id: '$sector', count: { $sum: 1 } } },
+    { $project: { _id: 0, sector: '$_id', count: 1 } },
+    { $sort: { count: -1 } }
+  ]);
+  return rows;
+};
+
+/**
+ * Right: Top 5 sectors list
+ */
+exports.getTop5Sectors = async (req, res) => {
+  try {
+    const rows = await exports.getIncidentsBySectorInternal();
+    return res.json(rows.slice(0, 5));
+  } catch (err) {
+    console.error('getTop5Sectors error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Bottom: Trend line by sector (time series)
+ * Query params:
+ *   - start (ISO date string) optional
+ *   - end (ISO date string) optional
+ *   - interval: 'month' (default) or 'week' or 'day'
+ *
+ * Returns: [{ sector, series: [{ period: 'YYYY-MM'|'YYYY-MM-DD'|'YYYY-ww', count } ... ] }]
+ */
+exports.getTrendBySector = async (req, res) => {
+  try {
+    const { start, end, interval } = req.query;
+    const int = (interval === 'day' || interval === 'week') ? interval : 'month';
+
+    // date filter using start_date if present, else added_to_DB
+    const dateField = '$start_date';
+
+    const match = { };
+    if (start || end) {
+      match.$and = [];
+      if (start) match.$and.push({ [dateField.slice(1)]: { $gte: new Date(start) } });
+      if (end) match.$and.push({ [dateField.slice(1)]: { $lte: new Date(end) } });
+    }
+
+    const dateFormat = (int === 'month') ? '%Y-%m' : (int === 'week') ? '%Y-%U' : '%Y-%m-%d';
+
+    const pipeline = [
+      // optional date filter
+      ...(Object.keys(match).length ? [{ $match: match }] : []),
+      ...baseUnwindSectorPipeline(),
+      // period string
+      {
+        $addFields: {
+          period: {
+            $dateToString: {
+              format: dateFormat,
+              date: { $ifNull: [ '$start_date', '$added_to_DB' ] }
+            }
+          }
+        }
+      },
+      { $group: { _id: { sector: '$sector', period: '$period' }, count: { $sum: 1 } } },
+      { $project: { _id: 0, sector: '$_id.sector', period: '$_id.period', count: 1 } },
+      { $sort: { sector: 1, period: 1 } },
+      // group periods into series array per sector
+      {
+        $group: {
+          _id: '$sector',
+          series: { $push: { period: '$period', count: '$count' } }
+        }
+      },
+      { $project: { _id: 0, sector: '$_id', series: 1 } }
+    ];
+
+    const rows = await Incident.aggregate(pipeline);
+    return res.json(rows);
+  } catch (err) {
+    console.error('getTrendBySector error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Bottom: Table of sector KPI summary
+ * Returns per sector:
+ *   - sector
+ *   - totalIncidents
+ *   - topAttackType (with count)
+ *   - latestIncidentDate
+ *
+ * Implementation: two aggregations (totals and top attack) then merge in JS.
+ */
+exports.getSectorKPITable = async (req, res) => {
+  try {
+    // totals + latest date
+    const totals = await Incident.aggregate([
+      ...baseUnwindSectorPipeline(),
+      {
+        $group: {
+          _id: '$sector',
+          totalIncidents: { $sum: 1 },
+          latestIncidentDate: { $max: { $ifNull: ['$start_date', '$added_to_DB'] } }
+        }
+      },
+      { $project: { _id: 0, sector: '$_id', totalIncidents: 1, latestIncidentDate: 1 } }
+    ]);
+
+    // top attack type per sector
+    const topAttacksPerSector = await Incident.aggregate([
+      ...baseUnwindSectorPipeline(),
+      { $group: { _id: { sector: '$sector', etype: '$incident_type' }, count: { $sum: 1 } } },
+      { $sort: { '_id.sector': 1, count: -1 } },
+      {
+        // group back by sector, picking first (highest count) etype per sector
+        $group: {
+          _id: '$_id.sector',
+          topAttackType: { $first: '$_id.etype' },
+          topAttackCount: { $first: '$count' }
+        }
+      },
+      { $project: { _id: 0, sector: '$_id', topAttackType: 1, topAttackCount: 1 } }
+    ]);
+
+    // merge by sector (create map)
+    const mapTop = new Map();
+    topAttacksPerSector.forEach(r => mapTop.set(r.sector, { topAttackType: r.topAttackType, topAttackCount: r.topAttackCount }));
+
+    const result = totals.map(t => {
+      const top = mapTop.get(t.sector) || { topAttackType: null, topAttackCount: 0 };
+      return {
+        sector: t.sector,
+        totalIncidents: t.totalIncidents,
+        topAttackType: top.topAttackType,
+        topAttackCount: top.topAttackCount,
+        latestIncidentDate: t.latestIncidentDate
+      };
+    });
+
+    // optionally sort by totalIncidents desc
+    result.sort((a, b) => b.totalIncidents - a.totalIncidents);
+
+    return res.json(result);
+  } catch (err) {
+    console.error('getSectorKPITable error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};

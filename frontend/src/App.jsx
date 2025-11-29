@@ -25,6 +25,7 @@ import CategoryDistribution from './Components/CategoryDistribution';
 import TypeTrends from './Components/Trends';
 import MoMGrowth from './Components/MOM';
 import GeographicHeatmap from './Components/Map';
+import Sectors from './Components/Sectors';
 
 import './index.css';
 
@@ -183,6 +184,14 @@ function App() {
           element={
             <PrivateRoute>
               <ReportCreationDark />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/sectors"
+          element={
+            <PrivateRoute>
+              <Sectors />
             </PrivateRoute>
           }
         />

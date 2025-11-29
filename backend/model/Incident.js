@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 
 const STATUS_TYPES = ['Open', 'Investigating', 'Resolved', 'Closed', 'Unknown'];
 
-// Fields that should always be an array in the DB
+
 const ARRAY_FIELDS = [
   'receiver_country',
   'receiver_category',
@@ -44,7 +44,7 @@ const IncidentSchema = new mongoose.Schema({
   receiver_category: { type: [String], default: [] },
   receiver_category_subcode: { type: [String], default: [] },
 
-  // list of source URLs
+  
   sources_attribution: { type: String, trim: true },
   sources_url: { type: [String], default: [] },
 
